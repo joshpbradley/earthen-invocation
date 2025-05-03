@@ -1,7 +1,9 @@
 # Earthen Invocation
 A unique spell individually designed and built for the third-person fantasy action RPG Samsara.
 
-The spell involves the caster kicking up a boulder of earth, striking it in mid-air, and propelling shards towards their enemies.
+It was built in Unreal Engine 5 using a combination of Unreal C++ and Blueprints.
+
+Upon activating the spell, the caster kicks up a boulder of earth, strikes it in mid-air, and propels shards of debris towards their enemies.
 
 An enemy hit by a projectile is inflicted with heavy poise damage and light physical damage. The spell is designed primarily as a crowd-control mechanism, providing a tool for dealing with overwhelming combat situations.
 
