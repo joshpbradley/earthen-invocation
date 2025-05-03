@@ -8,7 +8,7 @@
 #include "EarthenInvocationMantra.generated.h"
 
 /**
- * The Earthen Invocation mantra.
+ * Earthen Invocation mantra.
  */
 UCLASS()
 class SAMSARA_API UEarthenInvocationMantra : public USamsaraBaseSpell_cpp
@@ -17,37 +17,37 @@ class SAMSARA_API UEarthenInvocationMantra : public USamsaraBaseSpell_cpp
 
 protected:
 	/*
-	 * The unit vector representing the direction that the boulder / projectiles in the spell will launch in.
-	 * This direction should have a Z-component equal to 0.
+	 * The unit vector representing the yaw that the boulder/projectiles in the spell will launch in.
 	 */
 	UPROPERTY(BlueprintReadOnly)
 	FVector spellDirection;
 
 	/*
-	 * The horizontal distance in units between the caster and where the location that the boulder should spawn.
+	 * The XY world location that the boulder will spawn from.
 	 */
 	UPROPERTY(BlueprintReadOnly)
-	float boulderDistanceFromCaster = -1;
+	FVector2D boulderSpawnLocation;
 
 private:
 	/*
-	 * The caster of the spell. This actor should match the CharacterOwner property in the parent class.
+	 * The caster of the spell.
 	 * 
-	 * The reason for having a private copy (caster) of CharacterOwner is because CharacterOwner is only set upon the first activation
-	 * of the spell, and the actor is required to determine whether the spell can be activated - i.e., prior to the first spell activation.
+	 * This is used to retrieve the World reference instead of characterOwner in the parent class, which is unset prior to the first spell activation.
 	 */
 	ACharacter* caster = nullptr;
 
 protected:
 	/**
-	 * Gets the world context associated with the casting of this spell. The override is necessary so that
-	 * the caster variable is used to retrieve the world context instead of CharacterOwner, which may not have been set.
+	 * Gets the current World reference, which is required for performing line trace operations.
+     *
+     * The override is necessary because the base implementation of GetWorld() depends on characterOwner to retrieve the World reference,
+     * and characterOwner is unset prior to the first spell activation.
 	 */
 	UWorld* GetWorld() const override;
 
 	/**
-	 * Calculates and returns the unit vector of the spell's direction. This will be directly towards a targeted enemy if
-	 * the player is targeting, else it will be in the forward direction of the caster.
+	 * Calculates and returns the unit vector of the spell's direction. This will be directed towards a targeted enemy if
+	 * the caster is targeting, else it will be in the forward direction of the caster.
 	 * 
 	 * Return:
 	 * the unit vector direction of the spell.
@@ -55,19 +55,22 @@ protected:
 	FVector CalculateSpellDirection();
 
 	/**
-	 * The custom implementation that is executed on each CanExecuteAction call, invoked from blueprints.
-	 * This implementation includes a call to the parent function of CanExecuteAction, present in SamsaraBaseSpell_cpp.
-	 * Determines whether solid ground is directly in front of the caster so that the boulder has a surface to spawn from.
+	 * Determines whether there is flat ground directly in front of the caster, so that the boulder has a suitable surface to spawn from.
 	 * 
 	 * Params:
 	 * _caster - the caster of the spell.
-	 * _castAnimationDistance - the horizontal distance that the caster travels when casting the spell.
-	 * _lineTraceHeight - the vertical distance that should be inspected for solid ground in a line trace.
+	 * _casterAndBoulderHorizontalDistance - the horizontal distance between the caster and the boulder required to give the illusion of the boulder being struck.
+	 * This will approximately be the boulder radius + the forward distance travelled by the caster during the cast animation.
+	 * _angleTolerance - the maximum angle relative to horizontal plane that the spell can be cast at.
+	 * _maximumHeightDiscrepancyBetweenCasterAndSurface - the maximum height difference tolerated between the location where the caster is stood and the location for spawning the boulder.
+	 * _lineTraceHeight - the height of the line trace that detects an actor representing the floor.
+	 * 
 	 * Return:
-	 * true if ground has been detected, and so the spell can be casted, else false.
+	 * true if flat ground has been detected in front of the caster, else false.
 	 */
 	UFUNCTION(BlueprintCallable)
-	virtual bool CanExecuteAction_Custom(ACharacter* _caster, float _castAnimationDistance, float _lineTraceHeight);
+	virtual bool CanExecuteAction_Custom(ACharacter* _caster, float _casterAndBoulderHorizontalDistance,
+		float _angleTolerance, float _maximumHeightDiscrepancyBetweenCasterAndSurface, float _lineTraceHeight);
 
 	/**
 	 * Sets the spellDirection variable for the duration of the spell.

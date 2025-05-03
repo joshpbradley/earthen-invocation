@@ -2,11 +2,13 @@
 
 #include "EarthenInvocationMantra.h"
 
-#include "Engine/SkinnedAsset.h"
+#include <Kismet/KismetMathLibrary.h>
 
 /**
- * Gets the world context associated with the casting of this spell. The override is necessary so that
- * the caster variable is used to retrieve the world context instead of CharacterOwner, which may not have been set.
+ * Gets the current World reference, which is required for performing line trace operations.
+ *
+ * The override is necessary because the base implementation of GetWorld() depends on characterOwner to retrieve the World reference,
+ * and characterOwner is unset prior to the first spell activation.
  */
 UWorld* UEarthenInvocationMantra::GetWorld() const
 {
@@ -14,50 +16,48 @@ UWorld* UEarthenInvocationMantra::GetWorld() const
 }
 
 /**
- * The custom implementation that is executed on each CanExecuteAction call, invoked from blueprints.
- * This implementation includes a call to the parent function of CanExecuteAction, present in SamsaraBaseSpell_cpp.
- * Determines whether solid ground is directly in front of the caster so that the boulder has a surface to spawn from.
+ * Determines whether there is flat ground directly in front of the caster, so that the boulder has a suitable surface to spawn from.
  */
-bool UEarthenInvocationMantra::CanExecuteAction_Custom(ACharacter* _caster, float _castAnimationDistance, float _lineTraceHeight)
+bool UEarthenInvocationMantra::CanExecuteAction_Custom(ACharacter* _caster, float _casterAndBoulderHorizontalDistance,
+	float _angleTolerance, float _maximumHeightDiscrepancyBetweenCasterAndSurface, float _lineTraceHeight)
 {
 	if(!caster)
 	{
 		caster = _caster;
 	}
 
-	// Sets the boulder distance from the caster based on the caster's armspan and a given distance that the caster travels through in the animation.
-	if(boulderDistanceFromCaster < 0)
-	{
-		USkinnedAsset* mesh = Cast<USkeletalMeshComponent>(caster->GetComponentByClass(USkeletalMeshComponent::StaticClass()))->GetSkinnedAsset();
-		boulderDistanceFromCaster = _castAnimationDistance + mesh->GetBounds().BoxExtent.X;
-	}
-
 	// Determines whether the player has a conch to consume and is not experiencing ragdoll physics.
-	if(!USamsaraBaseSpell_cpp::CanExecuteAction_Implementation(caster))
+	if (!USamsaraBaseSpell_cpp::CanExecuteAction_Implementation(caster))
 	{
 		return false;
 	}
+	
+	// Gets the distance between the caster and boulder using the arm length of the caster.
+	auto skeletalMeshForSkeleton = Cast<USkeletalMeshComponent>(caster->GetComponentByClass(USkeletalMeshComponent::StaticClass()));
+	float upperArmLength = UKismetMathLibrary::Vector_Distance(skeletalMeshForSkeleton->GetSocketLocation("upperarm_r"), skeletalMeshForSkeleton->GetSocketLocation("lowerarm_r"));
+	float lowerArmLength = UKismetMathLibrary::Vector_Distance(skeletalMeshForSkeleton->GetSocketLocation("lowerarm_r"), skeletalMeshForSkeleton->GetSocketLocation("RightHandSocket"));
+	float torsoLength = UKismetMathLibrary::Vector_Distance(skeletalMeshForSkeleton->GetSocketLocation("spine_02"), skeletalMeshForSkeleton->GetSocketLocation("spine_05"));
+	float boulderDistanceFromCaster = _casterAndBoulderHorizontalDistance + upperArmLength + lowerArmLength + torsoLength;
 
-	// The boulder's displacement relative to the caster.
-	FVector boulderDisplacementFromCaster = CalculateSpellDirection() * boulderDistanceFromCaster;
-	// The location where the caster contacts the floor.
-	FVector casterStandingPosition;
+	// The displacement from the caster to the boulder.
+	FVector2D boulderDisplacementFromCaster = FVector2D(CalculateSpellDirection()) * boulderDistanceFromCaster;
 
 	// Gets the bounds of the caster's mesh.
-	auto mesh = Cast<USkeletalMeshComponent>(caster->GetComponentsByTag(USkeletalMeshComponent::StaticClass(), FName("Body"))[0]);
+	auto skeletalMeshForBounds = Cast<USkeletalMeshComponent>(caster->GetComponentsByTag(USkeletalMeshComponent::StaticClass(), FName("Body"))[0]);
+	FBoxSphereBounds bounds = skeletalMeshForBounds->Bounds;
 
-	FBoxSphereBounds bounds = mesh->Bounds;
+	// The location where the caster contacts the floor.
+	FVector casterStandingPosition = FVector(bounds.Origin.X, bounds.Origin.Y, bounds.Origin.Z - bounds.BoxExtent.Z);
 
-	casterStandingPosition = FVector(bounds.Origin.X, bounds.Origin.Y, bounds.Origin.Z - bounds.BoxExtent.Z);
+	// The central location of the trace - where the boulder will spawn from.
+	boulderSpawnLocation = FVector2D(casterStandingPosition) + boulderDisplacementFromCaster;
 
-	/*
-	 * The central location of the trace. A floor surface hit should occur at this location, or slightly above/below
-	 * (within a given height range, _lineTraceHeight), for the spell activation to be valid.
-	 */
-	auto traceLocation = casterStandingPosition + boulderDisplacementFromCaster;
+	// Stores the hit result of the line trace.
+	FHitResult hit;
 
-	FVector start(traceLocation.X, traceLocation.Y, traceLocation.Z + (_lineTraceHeight / 2));
-	FVector end(traceLocation.X, traceLocation.Y, traceLocation.Z - (_lineTraceHeight / 2));
+	// The beginning and end locations of the line trace.
+	FVector start(boulderSpawnLocation.X, boulderSpawnLocation.Y, casterStandingPosition.Z + _lineTraceHeight / 2);
+	FVector end(boulderSpawnLocation.X, boulderSpawnLocation.Y, casterStandingPosition.Z - _lineTraceHeight / 2);
 
 	// Query for WorldStatic objects.
 	FCollisionObjectQueryParams objectTypes;
@@ -67,18 +67,30 @@ bool UEarthenInvocationMantra::CanExecuteAction_Custom(ACharacter* _caster, floa
 	FCollisionQueryParams params;
 	params.AddIgnoredActor(caster);
 
-    return GetWorld()->LineTraceTestByObjectType(start, end, objectTypes, params);
+	GetWorld()->LineTraceSingleByObjectType(hit, start, end, objectTypes, params);
+
+	// No surface was found, or the difference in height between the caster and the detected surface is too great to cast.
+	if (!hit.bBlockingHit || abs(hit.Location.Z - casterStandingPosition.Z) > _maximumHeightDiscrepancyBetweenCasterAndSurface)
+	{
+		return false;
+	}
+	// Determine whether the surface is flat enough to cast.
+	else
+	{
+		return (90 - UKismetMathLibrary::MakeRotFromX(hit.ImpactNormal).Pitch) <= _angleTolerance;
+	}
 }
 
 /**
- * Calculates and returns the unit vector of the spell's direction. This will be directly towards a targeted enemy if
- * the player is targeting, else it will be in the forward direction of the caster.
+ * Calculates and returns the unit vector of the spell's direction. This will be directed towards a targeted enemy if
+ * the caster is targeting, else it will be in the forward direction of the caster.
  */
 FVector UEarthenInvocationMantra::CalculateSpellDirection()
 {
+	// Return an enemy reference if the caster is locked on.
 	AActor* target = GetSpellTarget(caster, 0);
 
-	// Target has been acquired, so set the direction towards them and parallel to the floor.
+	// Target has been acquired, so set the direction towards them.
 	if(target)
 	{
 		FVector direction = target->GetActorLocation() - caster->GetActorLocation();
@@ -87,7 +99,7 @@ FVector UEarthenInvocationMantra::CalculateSpellDirection()
 
 		return direction;
 	}
-	// No target acquired so set the spell direction to the forward vector of the caster.
+	// No target acquired so return the forward vector of the caster.
 	else
 	{
 		return caster->GetActorForwardVector();

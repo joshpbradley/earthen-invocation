@@ -13,13 +13,12 @@
 #include "../DamageTypes/EarthDamageType.h"
 
 /**
- * Spawns a given number of projectiles in an enclosed box region. It also sets the
+ * Spawns projectiles in a box region. It also sets the
  * rotation angle of each particle relative to the central direction vector
  * and the spread value.
  */
 void AEarthenInvocationManager::SpawnProjectiles(TSubclassOf<AActor> _projectile, int _numberOfProjectiles,
-	FVector _origin, FVector _extent, FVector _centralDirectionUnit, float _spread, UMaterialInterface* _material,
-	UMaterialInterface* _overlayMaterial, FVector _scale)
+	FVector _origin, FVector _extent, FVector _centralDirectionUnit, float _spread, UMaterialInterface* _material, FVector _scale)
 {
 	projectiles.Reserve(_numberOfProjectiles);
 
@@ -36,23 +35,18 @@ void AEarthenInvocationManager::SpawnProjectiles(TSubclassOf<AActor> _projectile
 		// Sets the final rotations, including a randomised roll angle [0-359].
 		FRotator rotation(pitchRotation.Pitch, yawRotation.Yaw, UKismetMathLibrary::RandomInteger(360));
 
-		// Sets miscellaneous spawn paramaters for the projectile.
+		// Sets spawn paramaters for the projectile.
 		FActorSpawnParameters spawnParams;
 		spawnParams.Instigator = GetInstigator();
 		spawnParams.TransformScaleMethod = ESpawnActorScaleMethod::OverrideRootScale;
 
-		// Spawns a new projectile.
+		// Spawns and scales a new projectile.
 		auto projectile = GetWorld()->SpawnActor<AActor>(_projectile->GetDefaultObject()->GetClass(), location, rotation, spawnParams);
 		projectile->SetActorScale3D(_scale * UKismetMathLibrary::RandomFloatInRange(0.5, 1.5));
 
+		// Applies material to the projectile.
 		auto mesh = projectile->GetComponentByClass<UStaticMeshComponent>();
-
-		// Applies material(s) to the projectile.
 		mesh->SetMaterial(0, _material);
-		if (_overlayMaterial)
-		{
-			mesh->SetOverlayMaterial(_overlayMaterial);
-		}
 
 		// Adds the projectile to the projectiles array, marking it as active.
 		projectiles.Add(projectile, true);

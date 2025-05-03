@@ -22,9 +22,9 @@ protected:
 
 protected:
 	/**
-	 * Spawns a given number of projectiles in an enclosed box region. It also sets the
-	 * rotation direction of each particle relative to the central direction vector
-	 * and the spread value.
+     * Spawns projectiles in a box region. It also sets the
+     * rotation angle of each particle relative to the central direction vector
+     * and the spread value.
 	 *
 	 * Params:
 	 * _projectile - the actor to spawn as projectiles.
@@ -33,16 +33,14 @@ protected:
 	 * _extent - the half size of the bounding box to spawn projectiles.
 	 * _centralDirectionUnit - a unit vector desribing the yaw, which is the central direction
 	 * where particles will be directed relative from
-	 * _spread - the spread of the projectile rotation. As the spread value increases,
+	 * _spread - the horizontal spread of the projectiles. As the spread value increases,
 	 * the actual spread of projectiles decreases.
 	 * _material - the material to apply to the projectiles.
-	 * _overlayMaterial - the overlay material to apply to the projectiles.
 	 * _scale - the scale of the projectiles.
 	 */
 	UFUNCTION(BlueprintCallable)
 	void SpawnProjectiles(TSubclassOf<AActor> _projectile, int _numberOfProjectiles, FVector _origin,
-		 FVector _extent, FVector _centralDirectionUnit, float _spread, UMaterialInterface* _material,
-		 UMaterialInterface* _overlayMaterial, FVector _scale = FVector(1, 1, 1));
+		 FVector _extent, FVector _centralDirectionUnit, float _spread, UMaterialInterface* _material, FVector _scale = FVector(1, 1, 1));
 
 	/**
 	 * Damages the target with poise and earth damage. This occurs if the target actor is considered to be the enemy character of the casting actor.
